@@ -52,22 +52,40 @@ export class Stadium {
             metalness: 0.3
         });
 
+        // 全階段ステップの数を計算
+        const layers = 3;
+        const sections = 16;
+        const steps = 8;
+        const totalSteps = layers * sections * steps;
+
+        // InstancedMeshで全ステップを作成
+        // 代表的なステップサイズを使用（後でスケールで調整）
+        const baseStepGeometry = new THREE.BoxGeometry(1, 1, 1);
+        const standsMesh = new THREE.InstancedMesh(
+            baseStepGeometry,
+            standMaterial,
+            totalSteps
+        );
+
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const rotation = new THREE.Euler();
+        const quaternion = new THREE.Quaternion();
+        const scale = new THREE.Vector3();
+
+        let instanceIndex = 0;
+
         // 3層のスタンド席を作成
-        for (let layer = 0; layer < 3; layer++) {
+        for (let layer = 0; layer < layers; layer++) {
             const innerRadius = 105 + layer * 20;
             const outerRadius = innerRadius + 18;
             const height = 15 + layer * 5;
             const yPosition = layer * 15;
 
             // スタンド本体（セクションごとに分割）
-            const sections = 16;
             for (let i = 0; i < sections; i++) {
                 const angle = (Math.PI * 2 * i) / sections;
                 const nextAngle = (Math.PI * 2 * (i + 1)) / sections;
-
-                // 各セクションの形状
-                const shape = new THREE.Shape();
-                const steps = 8;
 
                 // 階段状のスタンド
                 for (let step = 0; step < steps; step++) {
@@ -76,24 +94,30 @@ export class Stadium {
                     const r1 = innerRadius + step * stepDepth;
                     const r2 = r1 + stepDepth;
                     const y1 = step * stepHeight;
-                    const y2 = y1 + stepHeight;
-
-                    // セクションの一部を作成
-                    const sectionGeometry = new THREE.BoxGeometry(
-                        stepDepth * 0.9,
-                        stepHeight,
-                        2 * Math.PI * ((r1 + r2) / 2) / sections
-                    );
-                    const section = new THREE.Mesh(sectionGeometry, standMaterial);
 
                     const avgRadius = (r1 + r2) / 2;
                     const sectionAngle = (angle + nextAngle) / 2;
-                    section.position.x = Math.cos(sectionAngle) * avgRadius;
-                    section.position.z = Math.sin(sectionAngle) * avgRadius;
-                    section.position.y = yPosition + y1 + stepHeight / 2;
-                    section.rotation.y = sectionAngle;
 
-                    this.group.add(section);
+                    // 位置を設定
+                    position.x = Math.cos(sectionAngle) * avgRadius;
+                    position.z = Math.sin(sectionAngle) * avgRadius;
+                    position.y = yPosition + y1 + stepHeight / 2;
+
+                    // 回転を設定
+                    rotation.set(0, sectionAngle, 0);
+                    quaternion.setFromEuler(rotation);
+
+                    // スケールを設定（各ステップの実際のサイズ）
+                    scale.set(
+                        stepDepth * 0.9,
+                        stepHeight,
+                        2 * Math.PI * avgRadius / sections
+                    );
+
+                    // マトリックスを合成
+                    matrix.compose(position, quaternion, scale);
+                    standsMesh.setMatrixAt(instanceIndex, matrix);
+                    instanceIndex++;
                 }
             }
 
@@ -109,6 +133,9 @@ export class Stadium {
             rail.position.y = yPosition + height;
             this.group.add(rail);
         }
+
+        standsMesh.instanceMatrix.needsUpdate = true;
+        this.group.add(standsMesh);
     }
 
     createRoof() {
@@ -121,33 +148,64 @@ export class Stadium {
             side: THREE.DoubleSide
         });
 
+        // 屋根パネル用InstancedMesh
+        const roofGeometry = new THREE.BoxGeometry(40, 2, 30);
+        const roofMesh = new THREE.InstancedMesh(
+            roofGeometry,
+            roofMaterial,
+            roofSegments
+        );
+
+        // ビーム用InstancedMesh
+        const beamGeometry = new THREE.CylinderGeometry(0.5, 0.5, 60, 8);
+        const beamMaterial = new THREE.MeshStandardMaterial({
+            color: 0x333333,
+            metalness: 0.9,
+            roughness: 0.1
+        });
+        const beamMesh = new THREE.InstancedMesh(
+            beamGeometry,
+            beamMaterial,
+            roofSegments
+        );
+
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const rotation = new THREE.Euler();
+        const quaternion = new THREE.Quaternion();
+        const scale = new THREE.Vector3(1, 1, 1);
+
         for (let i = 0; i < roofSegments; i++) {
             const angle = (Math.PI * 2 * i) / roofSegments;
-            const roofGeometry = new THREE.BoxGeometry(40, 2, 30);
-            const roofPanel = new THREE.Mesh(roofGeometry, roofMaterial);
-
             const radius = 130;
-            roofPanel.position.x = Math.cos(angle) * radius;
-            roofPanel.position.z = Math.sin(angle) * radius;
-            roofPanel.position.y = 65;
-            roofPanel.rotation.y = angle;
-            roofPanel.rotation.z = -0.2;
 
-            this.group.add(roofPanel);
+            // 屋根パネル
+            position.set(
+                Math.cos(angle) * radius,
+                65,
+                Math.sin(angle) * radius
+            );
+            rotation.set(0, angle, -0.2);
+            quaternion.setFromEuler(rotation);
+            matrix.compose(position, quaternion, scale);
+            roofMesh.setMatrixAt(i, matrix);
 
             // サポートビーム
-            const beamGeometry = new THREE.CylinderGeometry(0.5, 0.5, 60, 8);
-            const beamMaterial = new THREE.MeshStandardMaterial({
-                color: 0x333333,
-                metalness: 0.9,
-                roughness: 0.1
-            });
-            const beam = new THREE.Mesh(beamGeometry, beamMaterial);
-            beam.position.x = Math.cos(angle) * 140;
-            beam.position.z = Math.sin(angle) * 140;
-            beam.position.y = 35;
-            this.group.add(beam);
+            position.set(
+                Math.cos(angle) * 140,
+                35,
+                Math.sin(angle) * 140
+            );
+            rotation.set(0, 0, 0);
+            quaternion.setFromEuler(rotation);
+            matrix.compose(position, quaternion, scale);
+            beamMesh.setMatrixAt(i, matrix);
         }
+
+        roofMesh.instanceMatrix.needsUpdate = true;
+        beamMesh.instanceMatrix.needsUpdate = true;
+        this.group.add(roofMesh);
+        this.group.add(beamMesh);
 
         // 中央の照明リグ構造
         const rigGeometry = new THREE.TorusGeometry(30, 1, 8, 32);

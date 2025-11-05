@@ -6,12 +6,23 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server": "node server.js",
+    "https": "node server.js"
   },
-  "keywords": ["three.js", "webgpu", "concert", "coldplay", "3d"],
+  "keywords": [
+    "three.js",
+    "webgpu",
+    "concert",
+    "coldplay",
+    "3d"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "three": "^0.169.0"
   },
   "devDependencies": {

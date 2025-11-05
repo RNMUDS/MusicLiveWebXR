@@ -44,8 +44,30 @@ class ColdplayConcert {
     async init() {
         // WebGPU対応チェック
         if (!navigator.gpu) {
-            console.warn('WebGPU is not supported, falling back to WebGL');
-            // WebGPURendererは自動的にWebGLにフォールバックします
+            console.warn('❌ WebGPU is not supported on this browser');
+            console.warn('ブラウザ:', navigator.userAgent);
+            console.warn('対応ブラウザ: Chrome 113+, Edge 113+, Safari 18+');
+            console.warn('→ WebGLにフォールバックします');
+        } else {
+            console.log('✅ WebGPU is available!');
+            console.log('GPU Adapter情報を取得中...');
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (adapter) {
+                    console.log('GPU Adapter:', adapter);
+                    const info = await adapter.requestAdapterInfo?.();
+                    if (info) {
+                        console.log('GPU情報:', {
+                            vendor: info.vendor,
+                            architecture: info.architecture,
+                            device: info.device,
+                            description: info.description
+                        });
+                    }
+                }
+            } catch (e) {
+                console.warn('GPU情報の取得に失敗:', e);
+            }
         }
 
         // シーンの作成

@@ -8,15 +8,18 @@ export class LightingSystem {
         this.movingHeads = [];
         this.intensity = 0.7;
         this.colors = [
-            0xff0000, // 赤
-            0x00ff00, // 緑
-            0x0000ff, // 青
-            0xff00ff, // マゼンタ
-            0xffff00, // 黄
-            0x00ffff, // シアン
-            0xff8800, // オレンジ
-            0x8800ff, // 紫
+            0x88ccff, // ライトブルー
+            0xaaddff, // スカイブルー
+            0xccffff, // アイスホワイト
+            0x6699ff, // ブルー
+            0x99ccff, // ペールブルー
+            0xbbddff, // ソフトブルー
+            0xddeeff, // ホワイトブルー
+            0x77aaff, // クールブルー
         ];
+        // InstancedMeshを保持
+        this.spotlightHelpers = null;
+        this.movingHeadMeshes = null;
     }
 
     init() {
@@ -48,6 +51,25 @@ export class LightingSystem {
             [10, 30, -30],
         ];
 
+        // InstancedMeshでライトヘルパーを作成
+        const helperGeometry = new THREE.ConeGeometry(0.5, 1, 8);
+        const helperMaterial = new THREE.MeshBasicMaterial({
+            transparent: true,
+            opacity: 0.8,
+        });
+        this.spotlightHelpers = new THREE.InstancedMesh(
+            helperGeometry,
+            helperMaterial,
+            spotPositions.length
+        );
+
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const rotation = new THREE.Euler();
+        const quaternion = new THREE.Quaternion();
+        const scale = new THREE.Vector3(1, 1, 1);
+        const colors = new Float32Array(spotPositions.length * 3);
+
         spotPositions.forEach((pos, index) => {
             const spotlight = new THREE.SpotLight(
                 this.colors[index % this.colors.length],
@@ -67,20 +89,26 @@ export class LightingSystem {
                 light: spotlight,
                 originalColor: this.colors[index % this.colors.length],
                 phase: Math.random() * Math.PI * 2,
+                helperIndex: index,
             });
 
-            // ライトヘルパー（ビジュアル）
-            const helperGeometry = new THREE.ConeGeometry(0.5, 1, 8);
-            const helperMaterial = new THREE.MeshBasicMaterial({
-                color: this.colors[index % this.colors.length],
-                transparent: true,
-                opacity: 0.8,
-            });
-            const helper = new THREE.Mesh(helperGeometry, helperMaterial);
-            helper.position.copy(spotlight.position);
-            helper.rotation.x = Math.PI;
-            this.scene.add(helper);
+            // InstancedMeshのマトリックスを設定
+            position.set(...pos);
+            rotation.set(Math.PI, 0, 0);
+            quaternion.setFromEuler(rotation);
+            matrix.compose(position, quaternion, scale);
+            this.spotlightHelpers.setMatrixAt(index, matrix);
+
+            // インスタンスカラーを設定
+            const color = new THREE.Color(this.colors[index % this.colors.length]);
+            colors[index * 3] = color.r;
+            colors[index * 3 + 1] = color.g;
+            colors[index * 3 + 2] = color.b;
         });
+
+        this.spotlightHelpers.instanceMatrix.needsUpdate = true;
+        this.spotlightHelpers.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+        this.scene.add(this.spotlightHelpers);
     }
 
     createMovingHeads() {
@@ -94,6 +122,25 @@ export class LightingSystem {
             [-20, 25, -50],
             [20, 25, -50],
         ];
+
+        // InstancedMeshでムービングヘッド本体を作成
+        const headGeometry = new THREE.BoxGeometry(0.8, 0.8, 1.2);
+        const headMaterial = new THREE.MeshStandardMaterial({
+            color: 0x222222,
+            metalness: 0.9,
+            roughness: 0.1,
+        });
+        this.movingHeadMeshes = new THREE.InstancedMesh(
+            headGeometry,
+            headMaterial,
+            positions.length
+        );
+
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const quaternion = new THREE.Quaternion();
+        const scale = new THREE.Vector3(1, 1, 1);
+        const colors = new Float32Array(positions.length * 3);
 
         positions.forEach((pos, index) => {
             const movingLight = new THREE.SpotLight(
@@ -120,21 +167,28 @@ export class LightingSystem {
                 speed: 0.5 + Math.random() * 0.5,
                 radius: 30 + Math.random() * 20,
                 height: 1 + Math.random() * 3,
+                meshIndex: index,
             });
 
-            // ムービングヘッド本体のビジュアル
-            const headGeometry = new THREE.BoxGeometry(0.8, 0.8, 1.2);
-            const headMaterial = new THREE.MeshStandardMaterial({
-                color: 0x222222,
-                metalness: 0.9,
-                roughness: 0.1,
-                emissive: this.colors[index % this.colors.length],
-                emissiveIntensity: 0.3,
-            });
-            const head = new THREE.Mesh(headGeometry, headMaterial);
-            head.position.copy(movingLight.position);
-            this.scene.add(head);
+            // InstancedMeshのマトリックスを設定
+            position.set(...pos);
+            matrix.compose(position, quaternion, scale);
+            this.movingHeadMeshes.setMatrixAt(index, matrix);
+
+            // エミッシブカラーを設定
+            const emissiveColor = new THREE.Color(this.colors[index % this.colors.length]);
+            colors[index * 3] = emissiveColor.r * 0.3;
+            colors[index * 3 + 1] = emissiveColor.g * 0.3;
+            colors[index * 3 + 2] = emissiveColor.b * 0.3;
         });
+
+        this.movingHeadMeshes.instanceMatrix.needsUpdate = true;
+
+        // エミッシブカラー用の属性を追加
+        const emissiveAttribute = new THREE.InstancedBufferAttribute(colors, 3);
+        this.movingHeadMeshes.geometry.setAttribute('instanceEmissive', emissiveAttribute);
+
+        this.scene.add(this.movingHeadMeshes);
     }
 
     createBacklights() {
