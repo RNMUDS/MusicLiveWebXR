@@ -1,0 +1,20 @@
+{
+  "name": "coldplay-concert-webgpu",
+  "version": "1.0.0",
+  "description": "Coldplay live concert experience with Three.js and WebGPU",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": ["three.js", "webgpu", "concert", "coldplay", "3d"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

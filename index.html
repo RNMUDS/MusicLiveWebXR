@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coldplay Live Concert - 3D Experience</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Arial', sans-serif;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.6;
+            z-index: 100;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            color: white;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            z-index: 100;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #1db954;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #1ed760;
+        }
+
+        button:active {
+            background: #169c46;
+        }
+
+        input[type="range"] {
+            width: 150px;
+        }
+
+        label {
+            font-size: 14px;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            z-index: 200;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading Coldplay Concert...</div>
+
+    <div id="info">
+        <strong>Coldplay Live Concert - 3D Experience</strong><br>
+        観客数: <span id="audience-count">0</span>人<br>
+        FPS: <span id="fps">0</span><br>
+        レンダラー: WebGL (高性能モード)<br>
+        カメラ操作: マウスドラッグ + ホイール
+    </div>
+
+    <div id="controls">
+        <button id="play-music">音楽開始</button>
+        <button id="camera-view">カメラ切替</button>
+        <label>
+            照明強度:
+            <input type="range" id="light-intensity" min="0" max="100" value="70">
+        </label>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
