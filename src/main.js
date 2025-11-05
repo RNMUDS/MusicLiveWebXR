@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WebGPURenderer } from 'three/webgpu';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Stadium } from './stadium.js';
 import { Stage } from './stage.js';
@@ -41,6 +42,12 @@ class ColdplayConcert {
     }
 
     async init() {
+        // WebGPU対応チェック
+        if (!navigator.gpu) {
+            console.warn('WebGPU is not supported, falling back to WebGL');
+            // WebGPURendererは自動的にWebGLにフォールバックします
+        }
+
         // シーンの作成
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x000510);
@@ -55,19 +62,31 @@ class ColdplayConcert {
         );
         this.camera.position.set(0, 50, 150);
 
-        // WebGLレンダラーの作成（高性能設定）
-        this.renderer = new THREE.WebGLRenderer({
+        // WebGPUレンダラーの作成
+        this.renderer = new WebGPURenderer({
             antialias: true,
-            powerPreference: 'high-performance',
-            stencil: false,
-            depth: true
+            forceWebGL: false // WebGPUを優先、利用不可時は自動的にWebGLフォールバック
         });
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // パフォーマンス最適化
+
+        try {
+            await this.renderer.init();
+            console.log('WebGPUレンダラーの初期化に成功');
+        } catch (error) {
+            console.error('レンダラーの初期化に失敗:', error);
+            document.getElementById('loading').textContent = 'レンダラーの初期化に失敗しました';
+            return;
+        }
+
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.2;
-        this.renderer.shadowMap.enabled = false; // パフォーマンスのためシャドウは無効
         this.container.appendChild(this.renderer.domElement);
+
+        // レンダラータイプを表示
+        const rendererType = this.renderer.backend?.isWebGPUBackend ? 'WebGPU' : 'WebGL (Fallback)';
+        document.getElementById('renderer-type').textContent = rendererType;
+        console.log(`使用中のレンダラー: ${rendererType}`);
 
         // コントロールの作成
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
