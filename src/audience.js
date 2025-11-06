@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class Audience {
-    constructor(count = 50000) {
+    constructor(count = 80000) {
         this.count = count;
         this.group = new THREE.Group();
         this.instancedMeshes = [];
@@ -19,7 +19,7 @@ export class Audience {
     }
 
     async createArenaAudience() {
-        const arenaCount = 5000; // アリーナ席: 5,000人
+        const arenaCount = 10000; // アリーナ席: 10,000人
 
         // シンプルな人型ジオメトリ（体）
         const bodyGeometry = new THREE.CapsuleGeometry(0.3, 1.2, 4, 8);
@@ -57,31 +57,34 @@ export class Audience {
         const scale = new THREE.Vector3(1, 1, 1);
 
         // アリーナ席の配置範囲
-        const arenaInnerRadius = 15;
+        const arenaInnerRadius = 10;
         const arenaOuterRadius = 95;
-        const excludeStageRadius = 40; // ステージエリアを除外
 
         for (let i = 0; i < arenaCount; i++) {
-            let x, z, distFromCenter;
+            let x, z;
             let validPosition = false;
 
-            // ステージエリアを避けた配置
+            // ステージエリアを避けた配置（ステージ後方のみ除外）
             while (!validPosition) {
                 const angle = Math.random() * Math.PI * 2;
                 const radius =
                     arenaInnerRadius +
-                    Math.random() * (arenaOuterRadius - arenaInnerRadius);
-
+                    Math.random() * (arenaOuterRadius - arenaInnerRadius)
                 x = Math.cos(angle) * radius;
-                z = Math.sin(angle) * radius;
-                distFromCenter = Math.sqrt(x * x + z * z);
+                z = Math.sin(angle) * radius+5;
 
-                // ステージエリアと花道を避ける
+                // メインステージエリアを避ける（z < -50のエリアのみ）
                 const isInStageArea = z < -50 && Math.abs(x) < 35;
-                const isInRunway =
-                    z > -55 && z < 10 && Math.abs(x) < 5;
+                // ステージ後方全体を除外（z < -300の全エリア）
+                const isBehindStage = z < -70;
+                // 花道を避ける（z: -55 ~ 10, x: ±4の範囲）- 幅を狭めて周辺まで配置
+                const isInRunway = z > -55 && z < 10 && Math.abs(x) < 4;
+                // センターステージを避ける（半径8.3以内）- エッジライトすれすれまで配置
+                const distFromCenterStage = Math.sqrt(x * x + Math.pow(z - 5, 2));
+                const isInCenterStage = distFromCenterStage < 8.3;
 
-                if (!isInStageArea && !isInRunway) {
+                // 花道、センターステージ、メインステージ、ステージ後方を除外
+                if (!isInStageArea && !isBehindStage && !isInRunway && !isInCenterStage) {
                     validPosition = true;
                 }
             }
@@ -127,7 +130,7 @@ export class Audience {
     }
 
     async createStandAudience() {
-        const standCount = this.count - 5000; // スタンド席: 45,000人
+        const standCount = this.count - 10000; // スタンド席: 70,000人
 
         const bodyGeometry = new THREE.CapsuleGeometry(0.3, 1.2, 4, 8);
         const bodyMaterial = new THREE.MeshStandardMaterial({
@@ -161,23 +164,36 @@ export class Audience {
         const quaternion = new THREE.Quaternion();
         const scale = new THREE.Vector3(1, 1, 1);
 
-        // スタンド席の3層配置
+        // スタンド席の4層配置
         let currentIndex = 0;
 
-        for (let layer = 0; layer < 3; layer++) {
-            const layerCount = Math.floor(standCount / 3);
+        for (let layer = 0; layer < 4; layer++) {
+            const layerCount = Math.floor(standCount / 4);
             const innerRadius = 105 + layer * 20;
             const outerRadius = innerRadius + 15;
             const baseHeight = layer * 15;
-            const seatRows = 10;
+            const seatRows = 15;  // 増やして密度を上げる
 
             for (let i = 0; i < layerCount && currentIndex < standCount; i++) {
-                const angle = (Math.random() * Math.PI * 2);
-                const row = Math.floor(Math.random() * seatRows);
-                const radius = innerRadius + (row / seatRows) * (outerRadius - innerRadius);
+                let x, z;
+                let validPosition = false;
 
-                const x = Math.cos(angle) * radius;
-                const z = Math.sin(angle) * radius;
+                // メインステージ後方のスタンドを除外
+                while (!validPosition) {
+                    const angle = (Math.random() * Math.PI * 2);
+                    const row = Math.floor(Math.random() * seatRows);
+                    const radius = innerRadius + (row / seatRows) * (outerRadius - innerRadius);
+
+                    x = Math.cos(angle) * radius;
+                    z = Math.sin(angle) * radius;
+
+                    // ステージ後方のスタンドを除外（z < -40）
+                    if (z >= -40) {
+                        validPosition = true;
+                    }
+                }
+
+                const row = Math.floor(Math.random() * seatRows);
                 const y = baseHeight + row * 1.5 + 0.5;
 
                 position.set(x, y, z);
@@ -203,7 +219,7 @@ export class Audience {
                     frequency: 0.8 + Math.random() * 0.4,
                     amplitude: 0.1 + Math.random() * 0.1,
                     position: new THREE.Vector3(x, y, z),
-                    bodyIndex: currentIndex + 5000, // オフセット
+                    bodyIndex: currentIndex + 10000, // オフセット（アリーナ10,000人分）
                     headOffset: 1.2
                 });
 
@@ -227,58 +243,64 @@ export class Audience {
         const quaternion = new THREE.Quaternion();
         const scale = new THREE.Vector3(1, 1, 1);
 
-        // 処理を軽くするため、一部の観客のみアニメーション
-        const updateInterval = 5; // 5フレームごとに更新
+        // パフォーマンス最適化：観客の一部のみ更新
+        const updateRatio = 0.3; // 30%の観客のみ更新
+        const frameOffset = Math.floor(time * 60) % 10;
 
-        if (Math.floor(time * 60) % updateInterval === 0) {
-            this.animationData.forEach((data, index) => {
-                // ウェーブ効果
-                const wave = Math.sin(time * data.frequency + data.phase);
-                const newY = data.originalY + wave * data.amplitude;
+        // フレームごとに異なる観客を更新
+        const startIndex = Math.floor(this.animationData.length * frameOffset / 10);
+        const endIndex = Math.floor(this.animationData.length * (frameOffset + updateRatio * 10) / 10);
 
-                // 腕を上げる動き（簡易的にスケールで表現）
-                const armRaise = Math.max(0, wave);
-                const bodyScale = new THREE.Vector3(1, 1 + armRaise * 0.2, 1);
+        for (let index = startIndex; index < endIndex; index++) {
+            if (index >= this.animationData.length) break;
+            const data = this.animationData[index];
 
-                // 体の更新
-                position.copy(data.position);
-                position.y = newY;
+            // ウェーブ効果
+            const wave = Math.sin(time * data.frequency + data.phase);
+            const newY = data.originalY + wave * data.amplitude;
 
-                const angleToStage = Math.atan2(-position.z - 70, -position.x);
-                const euler = new THREE.Euler(0, angleToStage + Math.PI / 2, 0);
-                quaternion.setFromEuler(euler);
+            // 腕を上げる動き（簡易的にスケールで表現）
+            const armRaise = Math.max(0, wave);
+            const bodyScale = new THREE.Vector3(1, 1 + armRaise * 0.2, 1);
 
-                matrix.compose(position, quaternion, bodyScale);
+            // 体の更新
+            position.copy(data.position);
+            position.y = newY;
 
-                // どのメッシュに属するか判定
-                if (index < 5000) {
-                    this.instancedMeshes[0].body.setMatrixAt(index, matrix);
-                } else {
-                    this.instancedMeshes[1].body.setMatrixAt(
-                        index - 5000,
-                        matrix
-                    );
-                }
+            const angleToStage = Math.atan2(-position.z - 70, -position.x);
+            const euler = new THREE.Euler(0, angleToStage + Math.PI / 2, 0);
+            quaternion.setFromEuler(euler);
 
-                // 頭の更新
-                position.y += data.headOffset;
-                matrix.compose(position, quaternion, scale);
+            matrix.compose(position, quaternion, bodyScale);
 
-                if (index < 5000) {
-                    this.instancedMeshes[0].head.setMatrixAt(index, matrix);
-                } else {
-                    this.instancedMeshes[1].head.setMatrixAt(
-                        index - 5000,
-                        matrix
-                    );
-                }
-            });
+            // どのメッシュに属するか判定（アリーナ10,000人、スタンド70,000人）
+            if (index < 10000) {
+                this.instancedMeshes[0].body.setMatrixAt(index, matrix);
+            } else {
+                this.instancedMeshes[1].body.setMatrixAt(
+                    index - 10000,
+                    matrix
+                );
+            }
 
-            // インスタンスマトリックスの更新フラグ
-            this.instancedMeshes.forEach((mesh) => {
-                mesh.body.instanceMatrix.needsUpdate = true;
-                mesh.head.instanceMatrix.needsUpdate = true;
-            });
+            // 頭の更新
+            position.y += data.headOffset;
+            matrix.compose(position, quaternion, scale);
+
+            if (index < 10000) {
+                this.instancedMeshes[0].head.setMatrixAt(index, matrix);
+            } else {
+                this.instancedMeshes[1].head.setMatrixAt(
+                    index - 10000,
+                    matrix
+                );
+            }
         }
+
+        // インスタンスマトリックスの更新フラグ
+        this.instancedMeshes.forEach((mesh) => {
+            mesh.body.instanceMatrix.needsUpdate = true;
+            mesh.head.instanceMatrix.needsUpdate = true;
+        });
     }
 }

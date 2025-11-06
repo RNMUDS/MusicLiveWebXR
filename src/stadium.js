@@ -53,7 +53,7 @@ export class Stadium {
         });
 
         // 全階段ステップの数を計算
-        const layers = 3;
+        const layers = 4;
         const sections = 16;
         const steps = 8;
         const totalSteps = layers * sections * steps;
@@ -75,7 +75,7 @@ export class Stadium {
 
         let instanceIndex = 0;
 
-        // 3層のスタンド席を作成
+        // 4層のスタンド席を作成
         for (let layer = 0; layer < layers; layer++) {
             const innerRadius = 105 + layer * 20;
             const outerRadius = innerRadius + 18;
@@ -139,24 +139,10 @@ export class Stadium {
     }
 
     createRoof() {
-        // 部分的な天井（コンサート会場風）
+        // 屋根パネルは削除（開放型スタジアム）
         const roofSegments = 8;
-        const roofMaterial = new THREE.MeshStandardMaterial({
-            color: 0x1a1a1a,
-            roughness: 0.5,
-            metalness: 0.7,
-            side: THREE.DoubleSide
-        });
 
-        // 屋根パネル用InstancedMesh
-        const roofGeometry = new THREE.BoxGeometry(40, 2, 30);
-        const roofMesh = new THREE.InstancedMesh(
-            roofGeometry,
-            roofMaterial,
-            roofSegments
-        );
-
-        // ビーム用InstancedMesh
+        // ビーム用InstancedMesh（照明を吊るすための構造）
         const beamGeometry = new THREE.CylinderGeometry(0.5, 0.5, 60, 8);
         const beamMaterial = new THREE.MeshStandardMaterial({
             color: 0x333333,
@@ -171,24 +157,11 @@ export class Stadium {
 
         const matrix = new THREE.Matrix4();
         const position = new THREE.Vector3();
-        const rotation = new THREE.Euler();
         const quaternion = new THREE.Quaternion();
         const scale = new THREE.Vector3(1, 1, 1);
 
         for (let i = 0; i < roofSegments; i++) {
             const angle = (Math.PI * 2 * i) / roofSegments;
-            const radius = 130;
-
-            // 屋根パネル
-            position.set(
-                Math.cos(angle) * radius,
-                65,
-                Math.sin(angle) * radius
-            );
-            rotation.set(0, angle, -0.2);
-            quaternion.setFromEuler(rotation);
-            matrix.compose(position, quaternion, scale);
-            roofMesh.setMatrixAt(i, matrix);
 
             // サポートビーム
             position.set(
@@ -196,28 +169,15 @@ export class Stadium {
                 35,
                 Math.sin(angle) * 140
             );
-            rotation.set(0, 0, 0);
-            quaternion.setFromEuler(rotation);
+            quaternion.set(0, 0, 0, 1);
             matrix.compose(position, quaternion, scale);
             beamMesh.setMatrixAt(i, matrix);
         }
 
-        roofMesh.instanceMatrix.needsUpdate = true;
         beamMesh.instanceMatrix.needsUpdate = true;
-        this.group.add(roofMesh);
         this.group.add(beamMesh);
 
-        // 中央の照明リグ構造
-        const rigGeometry = new THREE.TorusGeometry(30, 1, 8, 32);
-        const rigMaterial = new THREE.MeshStandardMaterial({
-            color: 0x222222,
-            metalness: 0.9,
-            roughness: 0.1
-        });
-        const rig = new THREE.Mesh(rigGeometry, rigMaterial);
-        rig.position.y = 55;
-        rig.rotation.x = Math.PI / 2;
-        this.group.add(rig);
+        // 中央の照明リグ構造は削除
     }
 
     createWalls() {

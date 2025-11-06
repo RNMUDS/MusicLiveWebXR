@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebXR Audio Demo</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 100;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+        }
+
+        button {
+            padding: 15px 30px;
+            margin: 5px;
+            font-size: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <strong>WebXR Audio Demo</strong><br>
+        状態: <span id="status">初期化中...</span><br>
+        <span id="xr-support"></span>
+    </div>
+
+    <div id="controls">
+        <button id="play-button">🎵 音楽を再生</button>
+        <button id="vr-button" disabled>🥽 VRモードで体験</button>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+
+        class WebXRAudioDemo {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.audioListener = null;
+                this.positionalAudio = null;
+                this.isPlaying = false;
+
+                this.init();
+            }
+
+            async init() {
+                // シーン作成
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x000510);
+                this.scene.fog = new THREE.Fog(0x000510, 10, 50);
+
+                // カメラ作成
+                this.camera = new THREE.PerspectiveCamera(
+                    75,
+                    window.innerWidth / window.innerHeight,
+                    0.1,
+                    100
+                );
+                this.camera.position.set(0, 1.6, 5); // VR目線の高さ
+
+                // レンダラー作成
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setPixelRatio(window.pixelRatio);
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.xr.enabled = true; // WebXR有効化
+                document.body.appendChild(this.renderer.domElement);
+
+                // WebXRサポート確認
+                if ('xr' in navigator) {
+                    const supported = await navigator.xr.isSessionSupported('immersive-vr');
+                    if (supported) {
+                        document.getElementById('xr-support').textContent = '✅ WebXR対応';
+                        document.getElementById('vr-button').disabled = false;
+
+                        // VRボタンを作成
+                        const vrButton = VRButton.createButton(this.renderer);
+                        document.getElementById('vr-button').addEventListener('click', () => {
+                            vrButton.click();
+                        });
+                    } else {
+                        document.getElementById('xr-support').textContent = '❌ VRヘッドセットが検出されません';
+                    }
+                } else {
+                    document.getElementById('xr-support').textContent = '❌ WebXR非対応ブラウザ';
+                }
+
+                // AudioListenerをカメラに追加
+                this.audioListener = new THREE.AudioListener();
+                this.camera.add(this.audioListener);
+
+                // シーンのセットアップ
+                this.createScene();
+
+                // 音源の読み込み
+                await this.loadAudio();
+
+                // イベントリスナー
+                document.getElementById('play-button').addEventListener('click', () => {
+                    this.toggleAudio();
+                });
+
+                window.addEventListener('resize', () => this.onWindowResize());
+
+                // アニメーション開始
+                this.renderer.setAnimationLoop(() => this.animate());
+
+                document.getElementById('status').textContent = '準備完了';
+            }
+
+            createScene() {
+                // 床
+                const floorGeometry = new THREE.PlaneGeometry(20, 20);
+                const floorMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x1a1a2e,
+                    roughness: 0.8,
+                    metalness: 0.2
+                });
+                const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                floor.rotation.x = -Math.PI / 2;
+                floor.receiveShadow = true;
+                this.scene.add(floor);
+
+                // グリッド
+                const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+                this.scene.add(gridHelper);
+
+                // 環境光
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+                this.scene.add(ambientLight);
+
+                // スピーカー（音源の視覚化）
+                const speakerGeometry = new THREE.BoxGeometry(1, 1.5, 0.8);
+                const speakerMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x222222,
+                    metalness: 0.8,
+                    roughness: 0.2
+                });
+
+                // 左スピーカー
+                const leftSpeaker = new THREE.Mesh(speakerGeometry, speakerMaterial);
+                leftSpeaker.position.set(-2, 0.75, 0);
+                this.scene.add(leftSpeaker);
+
+                // 右スピーカー
+                const rightSpeaker = new THREE.Mesh(speakerGeometry, speakerMaterial);
+                rightSpeaker.position.set(2, 0.75, 0);
+                this.scene.add(rightSpeaker);
+
+                // スピーカーグリル
+                const grillGeometry = new THREE.PlaneGeometry(0.7, 1.2);
+                const grillMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x111111,
+                    metalness: 0.5,
+                    roughness: 0.8
+                });
+
+                const leftGrill = new THREE.Mesh(grillGeometry, grillMaterial);
+                leftGrill.position.set(-2, 0.75, 0.41);
+                this.scene.add(leftGrill);
+
+                const rightGrill = new THREE.Mesh(grillGeometry, grillMaterial);
+                rightGrill.position.set(2, 0.75, 0.41);
+                this.scene.add(rightGrill);
+
+                // 音源位置を示すライト（中央）
+                const pointLight = new THREE.PointLight(0xff0000, 2, 10);
+                pointLight.position.set(0, 1, 0);
+                this.scene.add(pointLight);
+
+                // 音源を示す球体
+                const sphereGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+                const sphereMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xff0000,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                this.soundSourceSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                this.soundSourceSphere.position.set(0, 1, 0);
+                this.scene.add(this.soundSourceSphere);
+
+                // 照明（スピーカー用）
+                const leftLight = new THREE.SpotLight(0x4444ff, 1, 10);
+                leftLight.position.set(-2, 3, 2);
+                leftLight.target = leftSpeaker;
+                this.scene.add(leftLight);
+
+                const rightLight = new THREE.SpotLight(0x4444ff, 1, 10);
+                rightLight.position.set(2, 3, 2);
+                rightLight.target = rightSpeaker;
+                this.scene.add(rightLight);
+            }
+
+            async loadAudio() {
+                try {
+                    // PositionalAudioを作成
+                    this.positionalAudio = new THREE.PositionalAudio(this.audioListener);
+
+                    // オーディオローダーで音楽ファイルを読み込む
+                    const audioLoader = new THREE.AudioLoader();
+                    const buffer = await new Promise((resolve, reject) => {
+                        audioLoader.load(
+                            '/a_sky_full_of_stars.mp3',
+                            (audioBuffer) => resolve(audioBuffer),
+                            (progress) => {
+                                const percent = Math.round((progress.loaded / progress.total) * 100);
+                                document.getElementById('status').textContent = `読み込み中: ${percent}%`;
+                            },
+                            (error) => reject(error)
+                        );
+                    });
+
+                    this.positionalAudio.setBuffer(buffer);
+                    this.positionalAudio.setRefDistance(5); // 基準距離
+                    this.positionalAudio.setMaxDistance(50); // 最大距離
+                    this.positionalAudio.setRolloffFactor(1); // 距離減衰率
+                    this.positionalAudio.setVolume(1.0);
+                    this.positionalAudio.setLoop(true); // ループ再生
+
+                    // 音源を中央に配置
+                    this.soundSourceSphere.add(this.positionalAudio);
+
+                    console.log('✅ 音楽ファイルを読み込みました');
+                    console.log('Audio duration:', buffer.duration);
+                    document.getElementById('status').textContent = '準備完了';
+                } catch (error) {
+                    console.error('❌ 音楽ファイルの読み込みに失敗:', error);
+                    document.getElementById('status').textContent = '読み込み失敗';
+                }
+            }
+
+            toggleAudio() {
+                if (!this.positionalAudio) return;
+
+                if (this.isPlaying) {
+                    this.positionalAudio.pause();
+                    this.isPlaying = false;
+                    document.getElementById('play-button').textContent = '🎵 音楽を再生';
+                    document.getElementById('status').textContent = '一時停止';
+                } else {
+                    // AudioContextを再開（ブラウザのautoplay policy対策）
+                    if (this.audioListener.context.state === 'suspended') {
+                        this.audioListener.context.resume();
+                    }
+
+                    this.positionalAudio.play();
+                    this.isPlaying = true;
+                    document.getElementById('play-button').textContent = '⏸️ 一時停止';
+                    document.getElementById('status').textContent = '再生中';
+                }
+            }
+
+            animate() {
+                const time = performance.now() * 0.001;
+
+                // 音源をゆっくり回転
+                if (this.soundSourceSphere) {
+                    this.soundSourceSphere.position.x = Math.cos(time * 0.5) * 3;
+                    this.soundSourceSphere.position.z = Math.sin(time * 0.5) * 3;
+                    this.soundSourceSphere.position.y = 1 + Math.sin(time) * 0.5;
+
+                    // 音源の視覚的フィードバック（再生中に点滅）
+                    if (this.isPlaying) {
+                        const pulse = 0.5 + Math.sin(time * 5) * 0.3;
+                        this.soundSourceSphere.material.opacity = pulse;
+                        this.soundSourceSphere.scale.setScalar(1 + pulse * 0.3);
+                    }
+                }
+
+                this.renderer.render(this.scene, this.camera);
+            }
+
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        }
+
+        // アプリケーション起動
+        new WebXRAudioDemo();
+    </script>
+</body>
+</html>

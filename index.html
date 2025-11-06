@@ -37,48 +37,6 @@
             z-index: 100;
         }
 
-        #controls {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
-            border-radius: 10px;
-            color: white;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            z-index: 100;
-        }
-
-        button {
-            padding: 10px 20px;
-            background: #1db954;
-            border: none;
-            border-radius: 5px;
-            color: white;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: bold;
-            transition: background 0.3s;
-        }
-
-        button:hover {
-            background: #1ed760;
-        }
-
-        button:active {
-            background: #169c46;
-        }
-
-        input[type="range"] {
-            width: 150px;
-        }
-
-        label {
-            font-size: 14px;
-        }
 
         #loading {
             position: absolute;
@@ -100,15 +58,6 @@
         FPS: <span id="fps">0</span><br>
         レンダラー: <span id="renderer-type">WebGPU</span><br>
         カメラ操作: マウスドラッグ + ホイール
-    </div>
-
-    <div id="controls">
-        <button id="play-music">音楽開始</button>
-        <button id="camera-view">カメラ切替</button>
-        <label>
-            照明強度:
-            <input type="range" id="light-intensity" min="0" max="100" value="70">
-        </label>
     </div>
 
     <div id="canvas-container"></div>

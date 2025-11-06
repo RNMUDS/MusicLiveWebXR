@@ -20,9 +20,6 @@ export class ScreenSystem {
         // 大画面スクリーンの作成
         this.createMainScreens();
 
-        // サイドスクリーンの作成
-        this.createSideScreens();
-
         // デフォルトテクスチャ（カメラ起動前）
         this.createDefaultTexture();
 
@@ -104,47 +101,7 @@ export class ScreenSystem {
         });
     }
 
-    createSideScreens() {
-        // サイドスクリーン（観客席向け）
-        const sideConfigs = [
-            { position: [-70, 25, -30], rotation: [0, Math.PI / 4, 0], size: [15, 10] },
-            { position: [70, 25, -30], rotation: [0, -Math.PI / 4, 0], size: [15, 10] },
-            { position: [-70, 25, 20], rotation: [0, Math.PI / 4, 0], size: [12, 8] },
-            { position: [70, 25, 20], rotation: [0, -Math.PI / 4, 0], size: [12, 8] },
-        ];
-
-        sideConfigs.forEach((config) => {
-            const screenGeometry = new THREE.PlaneGeometry(...config.size);
-            const screenMaterial = new THREE.MeshBasicMaterial({
-                color: 0xffffff,
-                side: THREE.DoubleSide,
-            });
-
-            const screen = new THREE.Mesh(screenGeometry, screenMaterial);
-            screen.position.set(...config.position);
-            screen.rotation.set(...config.rotation);
-
-            this.group.add(screen);
-            this.screens.push(screen);
-
-            // フレーム
-            const frameGeometry = new THREE.BoxGeometry(
-                config.size[0] + 0.8,
-                config.size[1] + 0.8,
-                0.4
-            );
-            const frameMaterial = new THREE.MeshStandardMaterial({
-                color: 0x111111,
-                metalness: 0.8,
-                roughness: 0.2,
-            });
-            const frame = new THREE.Mesh(frameGeometry, frameMaterial);
-            frame.position.copy(screen.position);
-            frame.rotation.copy(screen.rotation);
-            frame.position.z -= 0.2;
-            this.group.add(frame);
-        });
-    }
+ 
 
     async startCamera() {
         if (this.cameraActive) return;

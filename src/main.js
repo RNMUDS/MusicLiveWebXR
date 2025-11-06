@@ -30,14 +30,6 @@ class ColdplayConcert {
         this.frameCount = 0;
         this.lastTime = performance.now();
 
-        this.cameraViews = [
-            { position: [0, 50, 150], target: [0, 10, 0], name: '全体ビュー' },
-            { position: [0, 5, 50], target: [0, 3, 0], name: 'ステージ正面' },
-            { position: [0, 30, 0], target: [0, 0, -30], name: '花道センター' },
-            { position: [-80, 40, 0], target: [0, 10, 0], name: '客席サイド' }
-        ];
-        this.currentViewIndex = 0;
-
         this.init();
     }
 
@@ -99,10 +91,15 @@ class ColdplayConcert {
             return;
         }
 
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        // パフォーマンス最適化のためPixelRatioを1に固定
+        this.renderer.setPixelRatio(1);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.2;
+
+        // WebGPU最適化設定
+        this.renderer.info.autoReset = false; // 手動でリセット
+
         this.container.appendChild(this.renderer.domElement);
 
         // レンダラータイプを表示
@@ -151,8 +148,8 @@ class ColdplayConcert {
         this.lightingSystem = new LightingSystem(this.scene);
         this.lightingSystem.init();
 
-        // 観客の生成（5万人）
-        this.audience = new Audience(50000);
+        // 観客の生成（8万人）
+        this.audience = new Audience(80000);
         await this.audience.init();
         this.scene.add(this.audience.group);
 
@@ -170,40 +167,81 @@ class ColdplayConcert {
         await this.screenSystem.init();
         this.scene.add(this.screenSystem.group);
 
-        // 音楽同期システム
-        this.audioSync = new AudioSync();
+        // 音楽同期システム（3D空間音響）
+        this.audioSync = new AudioSync(this.camera, this.scene);
+        await this.audioSync.init();
+
+        // Coldplayの曲を読み込み
+        await this.audioSync.loadAudioFile('/a_sky_full_of_stars.mp3');
 
         console.log('すべてのシステムの初期化が完了しました');
+
+        // ローディング画面を非表示
+        document.getElementById('loading').style.display = 'none';
+
+        // 音楽を自動再生（最初のユーザー操作で開始）
+        this.setupAutoplay();
+    }
+
+    setupAutoplay() {
+        console.log('🎵 最初のクリックで音楽を開始します...');
+
+        // 一度だけ実行されるイベントリスナー
+        const startAudio = async () => {
+            console.log('🎵 ユーザー操作を検出。音楽を開始します...');
+            await this.audioSync.play();
+
+            // イベントリスナーを削除
+            document.removeEventListener('click', startAudio);
+            document.removeEventListener('keydown', startAudio);
+        };
+
+        document.addEventListener('click', startAudio, { once: true });
+        document.addEventListener('keydown', startAudio, { once: true });
+    }
+
+    showPlayButton() {
+        const loading = document.getElementById('loading');
+        loading.innerHTML = `
+            <button id="play-button" style="
+                padding: 20px 40px;
+                font-size: 24px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                border: none;
+                border-radius: 50px;
+                cursor: pointer;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+                transition: transform 0.2s;
+            ">
+                🎵 Start Concert 🎵
+            </button>
+        `;
+
+        const playButton = document.getElementById('play-button');
+        playButton.addEventListener('mouseover', () => {
+            playButton.style.transform = 'scale(1.1)';
+        });
+        playButton.addEventListener('mouseout', () => {
+            playButton.style.transform = 'scale(1.0)';
+        });
+        playButton.addEventListener('click', async () => {
+            await this.audioSync.play();
+            loading.style.display = 'none';
+        });
     }
 
     setupEventListeners() {
         // リサイズ
         window.addEventListener('resize', () => this.onWindowResize(), false);
 
-        // 音楽開始ボタン
-        document.getElementById('play-music').addEventListener('click', () => {
-            this.audioSync.toggle();
+        // スペースキーで音楽の再生/一時停止
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                this.audioSync.toggle();
+            }
         });
-
-        // カメラビュー切替
-        document.getElementById('camera-view').addEventListener('click', () => {
-            this.switchCameraView();
-        });
-
-        // 照明強度スライダー
-        document.getElementById('light-intensity').addEventListener('input', (e) => {
-            const intensity = parseFloat(e.target.value) / 100;
-            this.lightingSystem.setIntensity(intensity);
-        });
-    }
-
-    switchCameraView() {
-        this.currentViewIndex = (this.currentViewIndex + 1) % this.cameraViews.length;
-        const view = this.cameraViews[this.currentViewIndex];
-
-        this.camera.position.set(...view.position);
-        this.controls.target.set(...view.target);
-        this.controls.update();
     }
 
     onWindowResize() {
@@ -229,17 +267,27 @@ class ColdplayConcert {
 
         const deltaTime = this.clock.getDelta();
         const elapsedTime = this.clock.getElapsedTime();
+        const frameCount = Math.floor(elapsedTime * 60); // 60fps基準のフレームカウント
 
-        // 各システムの更新
-        if (this.audience) {
-            this.audience.update(elapsedTime, deltaTime);
+        // 各システムの更新（更新頻度を最適化）
+        if (this.stage) {
+            this.stage.update(elapsedTime);
         }
 
+        // 観客は2フレームに1回更新（30fps相当）
+        if (frameCount % 2 === 0) {
+            if (this.audience) {
+                this.audience.update(elapsedTime, deltaTime);
+            }
+        }
+
+        // ペンライトは毎フレーム更新（60fps）で滑らかに
         if (this.penlightSystem) {
             const audioData = this.audioSync.getAudioData();
             this.penlightSystem.update(elapsedTime, audioData);
         }
 
+        // 照明は毎フレーム更新（重要な演出）
         if (this.lightingSystem) {
             const audioData = this.audioSync.getAudioData();
             this.lightingSystem.update(elapsedTime, audioData);
@@ -257,6 +305,11 @@ class ColdplayConcert {
 
         // レンダリング
         this.renderer.render(this.scene, this.camera);
+
+        // レンダラー情報を手動でリセット（パフォーマンス向上）
+        if (frameCount % 60 === 0) {
+            this.renderer.info.reset();
+        }
     }
 }
 

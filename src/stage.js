@@ -3,6 +3,7 @@ import * as THREE from 'three';
 export class Stage {
     constructor() {
         this.group = new THREE.Group();
+        this.glowingEdges = []; // アニメーション用のエッジ配列
         this.createStage();
     }
 
@@ -32,25 +33,52 @@ export class Stage {
         stage.position.set(0, 1.5, -70);
         this.group.add(stage);
 
-        // ステージエッジのLEDライン
-        const edgeMaterial = new THREE.MeshStandardMaterial({
-            color: 0x00ffff,
-            emissive: 0x00ffff,
-            emissiveIntensity: 1.0
+        // ステージエッジのLEDライン - 加算合成で光らせる
+        // グラデーションテクスチャを作成
+        const edgeTexture = this.createGradientTexture();
+
+        const edgeMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ff00,  // 蛍光グリーン
+            map: edgeTexture,
+            transparent: true,
+            blending: THREE.AdditiveBlending,  // 加算合成
+            side: THREE.DoubleSide,
+            depthWrite: false  // 透過処理を正しく
         });
 
-        // 前面エッジ
-        const frontEdgeGeometry = new THREE.BoxGeometry(60, 0.3, 0.5);
-        const frontEdge = new THREE.Mesh(frontEdgeGeometry, edgeMaterial);
-        frontEdge.position.set(0, 3.2, -55);
-        this.group.add(frontEdge);
+        // 前面エッジ - 二重にして光を強調
+        for (let i = 0; i < 2; i++) {
+            const frontEdgeGeometry = new THREE.BoxGeometry(60, 0.4 + i * 0.2, 0.6 + i * 0.2);
+            const frontEdge = new THREE.Mesh(frontEdgeGeometry, edgeMaterial.clone());
+            frontEdge.position.set(0, 3.2, -55);
+            this.group.add(frontEdge);
+            this.glowingEdges.push({
+                mesh: frontEdge,
+                material: frontEdge.material,
+                speed: 0.5 + i * 0.3
+            });
+        }
 
-        // サイドエッジ
+        // エッジ周辺のポイントライト（グロー効果強化）
+        for (let i = 0; i < 8; i++) {
+            const light = new THREE.PointLight(0x00ff00, 3, 20);
+            light.position.set(-28 + i * 8, 3.2, -55);
+            this.group.add(light);
+        }
+
+        // サイドエッジ - 二重構造
         for (let side of [-1, 1]) {
-            const sideEdgeGeometry = new THREE.BoxGeometry(0.5, 0.3, 30);
-            const sideEdge = new THREE.Mesh(sideEdgeGeometry, edgeMaterial);
-            sideEdge.position.set(side * 30, 3.2, -70);
-            this.group.add(sideEdge);
+            for (let i = 0; i < 2; i++) {
+                const sideEdgeGeometry = new THREE.BoxGeometry(0.6 + i * 0.2, 0.4 + i * 0.2, 30);
+                const sideEdge = new THREE.Mesh(sideEdgeGeometry, edgeMaterial.clone());
+                sideEdge.position.set(side * 30, 3.2, -70);
+                this.group.add(sideEdge);
+                this.glowingEdges.push({
+                    mesh: sideEdge,
+                    material: sideEdge.material,
+                    speed: 0.4 + i * 0.2
+                });
+            }
         }
 
         // ステージバック（機材エリア）
@@ -80,42 +108,54 @@ export class Stage {
         runway.position.set(0, 1, -25);
         this.group.add(runway);
 
-        // 花道のLEDストリップ（両サイド）
-        const ledMaterial = new THREE.MeshStandardMaterial({
-            color: 0xff00ff,
-            emissive: 0xff00ff,
-            emissiveIntensity: 1.5
+        // 花道のLEDストリップ（両サイド）- 加算合成で光らせる
+        const runwayTexture = this.createGradientTexture();
+
+        const ledMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff1493,  // 蛍光ピンク
+            map: runwayTexture,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide,
+            depthWrite: false
         });
 
-        // LEDストリップ用InstancedMesh（2本）
-        const ledStripGeometry = new THREE.BoxGeometry(0.3, 0.3, runwayLength);
-        const ledStripMesh = new THREE.InstancedMesh(ledStripGeometry, ledMaterial, 2);
+        // LEDストリップ用InstancedMesh（2本 x 2層 = 4本）
+        const ledStripGeometry = new THREE.BoxGeometry(0.4, 0.4, runwayLength);
+        const ledStripMesh = new THREE.InstancedMesh(ledStripGeometry, ledMaterial, 4);
 
-        // LEDライトポイント用InstancedMesh（両サイド20個ずつ = 40個）
+        // LEDライトポイント用InstancedMesh（両サイド20個ずつ x 2層 = 80個）
         const numLights = 20;
-        const lightGeometry = new THREE.SphereGeometry(0.3, 8, 8);
-        const lightMesh = new THREE.InstancedMesh(lightGeometry, ledMaterial, numLights * 2);
+        const lightGeometry = new THREE.SphereGeometry(0.35, 8, 8);
+        const lightMesh = new THREE.InstancedMesh(lightGeometry, ledMaterial, numLights * 4);
 
         const matrix = new THREE.Matrix4();
         const position = new THREE.Vector3();
         const quaternion = new THREE.Quaternion();
         const scale = new THREE.Vector3(1, 1, 1);
 
+        let stripIndex = 0;
         let lightIndex = 0;
-        for (let side of [-1, 1]) {
-            // LEDストリップ
-            const stripIndex = side === -1 ? 0 : 1;
-            position.set(side * (runwayWidth / 2), 2.2, -25);
-            matrix.compose(position, quaternion, scale);
-            ledStripMesh.setMatrixAt(stripIndex, matrix);
 
-            // LEDライトポイント
-            for (let i = 0; i < numLights; i++) {
-                const z = -55 + (i * runwayLength) / numLights;
-                position.set(side * (runwayWidth / 2), 2.5, z);
+        // 両サイド x 2層の二重構造で光を強調
+        for (let side of [-1, 1]) {
+            for (let layer = 0; layer < 2; layer++) {
+                const offset = layer * 0.15;
+
+                // LEDストリップ
+                position.set(side * (runwayWidth / 2), 2.2 + offset, -25);
                 matrix.compose(position, quaternion, scale);
-                lightMesh.setMatrixAt(lightIndex, matrix);
-                lightIndex++;
+                ledStripMesh.setMatrixAt(stripIndex, matrix);
+                stripIndex++;
+
+                // LEDライトポイント
+                for (let i = 0; i < numLights; i++) {
+                    const z = -55 + (i * runwayLength) / numLights;
+                    position.set(side * (runwayWidth / 2), 2.5 + offset, z);
+                    matrix.compose(position, quaternion, scale);
+                    lightMesh.setMatrixAt(lightIndex, matrix);
+                    lightIndex++;
+                }
             }
         }
 
@@ -123,10 +163,18 @@ export class Stage {
         lightMesh.instanceMatrix.needsUpdate = true;
         this.group.add(ledStripMesh);
         this.group.add(lightMesh);
+
+        // アニメーション用に保存
+        this.glowingEdges.push({
+            mesh: ledStripMesh,
+            material: ledMaterial,
+            speed: 0.6,
+            isInstanced: true
+        });
     }
 
     createCenterStage() {
-        // センターステージ（円形）
+        // センターステージ（円形）- 金属質で光を反射
         const centerRadius = 8;
         const centerGeometry = new THREE.CylinderGeometry(
             centerRadius,
@@ -135,27 +183,56 @@ export class Stage {
             32
         );
         const centerMaterial = new THREE.MeshStandardMaterial({
-            color: 0x1a1a1a,
-            roughness: 0.3,
-            metalness: 0.7
+            color: 0xcccccc,  // シルバー色
+            roughness: 0.1,   // 滑らかな表面
+            metalness: 1.0,   // 完全な金属
+            envMapIntensity: 2.0  // 環境マップの強度
         });
         const centerStage = new THREE.Mesh(centerGeometry, centerMaterial);
         centerStage.position.set(0, 1.25, 5);
+        centerStage.receiveShadow = true;  // 影を受ける
         this.group.add(centerStage);
 
-        // センターステージのリング装飾
-        const ringGeometry = new THREE.TorusGeometry(centerRadius + 0.5, 0.3, 16, 32);
-        const ringMaterial = new THREE.MeshStandardMaterial({
-            color: 0xffff00,
-            emissive: 0xffaa00,
-            emissiveIntensity: 1.2
-        });
-        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-        ring.position.set(0, 2.6, 5);
-        ring.rotation.x = Math.PI / 2;
-        this.group.add(ring);
+        // センターステージのエッジLED - 静止した光
+        const centerTexture = this.createGradientTexture();
 
-        // センターステージの上昇プラットフォーム効果
+        // 二重のリング構造で光を強調（アニメーションなし）
+        for (let i = 0; i < 2; i++) {
+            const centerEdgeGeometry = new THREE.TorusGeometry(
+                centerRadius + i * 0.2,
+                0.3 + i * 0.1,
+                16,
+                64
+            );
+            const centerEdgeMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffff00,  // 蛍光イエロー
+                map: centerTexture,
+                transparent: true,
+                opacity: 0.8 + i * 0.1,
+                blending: THREE.AdditiveBlending,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const centerEdge = new THREE.Mesh(centerEdgeGeometry, centerEdgeMaterial);
+            centerEdge.position.set(0, 2.6, 5);
+            centerEdge.rotation.x = Math.PI / 2;
+            this.group.add(centerEdge);
+            // glowingEdgesには追加しない（アニメーションさせない）
+        }
+
+        // センターステージ周辺のポイントライト（グロー効果強化）
+        for (let i = 0; i < 12; i++) {
+            const angle = (Math.PI * 2 * i) / 12;
+            const light = new THREE.PointLight(0xffff00, 4, 15);
+            light.position.set(
+                Math.cos(angle) * (centerRadius + 0.5),
+                2.6,
+                5 + Math.sin(angle) * (centerRadius + 0.5)
+            );
+            this.group.add(light);
+        }
+
+        // センターステージの上昇プラットフォーム効果 - 金属質
         const platformGeometry = new THREE.CylinderGeometry(
             centerRadius - 1,
             centerRadius - 1,
@@ -163,14 +240,14 @@ export class Stage {
             32
         );
         const platformMaterial = new THREE.MeshStandardMaterial({
-            color: 0x3a3a3a,
-            emissive: 0x0088ff,
-            emissiveIntensity: 0.5,
-            roughness: 0.2,
-            metalness: 0.9
+            color: 0xaaaaaa,  // 明るいシルバー
+            roughness: 0.05,  // 非常に滑らか
+            metalness: 1.0,   // 完全な金属
+            envMapIntensity: 2.5
         });
         const platform = new THREE.Mesh(platformGeometry, platformMaterial);
         platform.position.set(0, 2.75, 5);
+        platform.receiveShadow = true;
         this.group.add(platform);
     }
 
@@ -290,5 +367,46 @@ export class Stage {
 
         monitorMesh.instanceMatrix.needsUpdate = true;
         this.group.add(monitorMesh);
+    }
+
+    // グラデーションテクスチャを生成（光のエフェクト用）
+    createGradientTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const context = canvas.getContext('2d');
+
+        // 放射状グラデーション
+        const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+        gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.8)');
+        gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, 256, 256);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+
+        return texture;
+    }
+
+    // エッジライトのアニメーション更新
+    update(time) {
+        // 各エッジのテクスチャーをアニメーション
+        this.glowingEdges.forEach((edge) => {
+            if (edge.material && edge.material.map) {
+                // テクスチャーをスクロールさせて流れる光を表現
+                edge.material.map.offset.x = -time * edge.speed * 0.3;
+                edge.material.map.offset.y = Math.sin(time * edge.speed) * 0.2;
+
+                // 明滅効果
+                const pulse = 0.7 + Math.sin(time * edge.speed * 2) * 0.3;
+                edge.material.opacity = pulse;
+            }
+        });
     }
 }

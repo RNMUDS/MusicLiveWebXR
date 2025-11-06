@@ -1,12 +1,16 @@
 import * as THREE from 'three';
 
 export class AudioSync {
-    constructor() {
+    constructor(camera, scene) {
+        this.camera = camera;
+        this.scene = scene;
         this.audioContext = null;
         this.analyser = null;
         this.dataArray = null;
         this.bufferLength = 0;
         this.audioElement = null;
+        this.positionalAudio = null;
+        this.audioListener = null;
         this.isPlaying = false;
         this.beat = 0;
         this.bass = 0;
@@ -20,49 +24,116 @@ export class AudioSync {
     }
 
     async init() {
+        // AudioListenerを作成してカメラに追加
+        this.audioListener = new THREE.AudioListener();
+        this.camera.add(this.audioListener);
+
         // Web Audio APIのセットアップ
-        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        this.audioContext = this.audioListener.context;
         this.analyser = this.audioContext.createAnalyser();
         this.analyser.fftSize = 2048;
         this.bufferLength = this.analyser.frequencyBinCount;
         this.dataArray = new Uint8Array(this.bufferLength);
 
-        // オーディオ要素の作成（デモ用：サイン波）
-        this.createDemoAudio();
-
-        console.log('オーディオシステムを初期化しました');
+        console.log('オーディオシステムを初期化しました（3D空間音響対応）');
     }
 
-    createDemoAudio() {
-        // デモ用のシンセサウンド（実際の音楽ファイルに置き換え可能）
-        this.oscillator = this.audioContext.createOscillator();
-        this.gainNode = this.audioContext.createGain();
+    createSpeakerObjects() {
+        // ステージにスピーカーを配置（視覚的表現）
+        const speakerGeometry = new THREE.BoxGeometry(2, 3, 1.5);
+        const speakerMaterial = new THREE.MeshStandardMaterial({
+            color: 0x222222,
+            metalness: 0.8,
+            roughness: 0.2,
+        });
 
-        this.oscillator.type = 'sine';
-        this.oscillator.frequency.setValueAtTime(0, this.audioContext.currentTime);
+        // 左右のメインスピーカー
+        const positions = [
+            { x: -15, y: 5, z: -65 },  // 左
+            { x: 15, y: 5, z: -65 },   // 右
+            { x: -10, y: 3, z: -68 },  // 左内側
+            { x: 10, y: 3, z: -68 },   // 右内側
+        ];
 
-        this.oscillator.connect(this.gainNode);
-        this.gainNode.connect(this.analyser);
-        this.analyser.connect(this.audioContext.destination);
+        positions.forEach((pos) => {
+            const speaker = new THREE.Mesh(speakerGeometry, speakerMaterial);
+            speaker.position.set(pos.x, pos.y, pos.z);
+            this.scene.add(speaker);
 
-        this.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+            // スピーカーグリル（メッシュ）
+            const grillGeometry = new THREE.PlaneGeometry(1.5, 2.5);
+            const grillMaterial = new THREE.MeshStandardMaterial({
+                color: 0x111111,
+                metalness: 0.5,
+                roughness: 0.8,
+            });
+            const grill = new THREE.Mesh(grillGeometry, grillMaterial);
+            grill.position.set(pos.x, pos.y, pos.z + 0.76);
+            this.scene.add(grill);
+        });
+
+        console.log('スピーカーオブジェクトを配置しました');
     }
 
     async loadAudioFile(url) {
         try {
-            // 音楽ファイルを読み込む
-            this.audioElement = new Audio(url);
-            this.audioElement.crossOrigin = 'anonymous';
+            console.log('🎵 音楽ファイルの読み込みを開始:', url);
 
-            const source = this.audioContext.createMediaElementSource(
-                this.audioElement
-            );
-            source.connect(this.analyser);
-            this.analyser.connect(this.audioContext.destination);
+            // PositionalAudioを作成（ステージ中央に配置）
+            this.positionalAudio = new THREE.PositionalAudio(this.audioListener);
 
-            console.log('音楽ファイルを読み込みました:', url);
+            // オーディオローダーで音楽ファイルを読み込む
+            const audioLoader = new THREE.AudioLoader();
+            const buffer = await new Promise((resolve, reject) => {
+                audioLoader.load(
+                    url,
+                    (audioBuffer) => {
+                        console.log('✅ オーディオバッファを取得しました');
+                        resolve(audioBuffer);
+                    },
+                    (progress) => {
+                        if (progress.lengthComputable) {
+                            const percent = Math.round((progress.loaded / progress.total) * 100);
+                            console.log('Loading audio:', percent + '%');
+                        }
+                    },
+                    (error) => {
+                        console.error('❌ AudioLoader error:', error);
+                        reject(error);
+                    }
+                );
+            });
+
+            console.log('🎵 オーディオバッファを設定中...');
+            this.positionalAudio.setBuffer(buffer);
+            this.positionalAudio.setRefDistance(20); // 基準距離
+            this.positionalAudio.setMaxDistance(300); // 最大距離
+            this.positionalAudio.setRolloffFactor(1); // 距離減衰率
+            this.positionalAudio.setVolume(1.0); // 音量
+            this.positionalAudio.setLoop(false); // ループなし（1回再生）
+
+            // 音源をステージ中央に配置
+            this.soundSource = new THREE.Object3D();
+            this.soundSource.position.set(0, 5, -65); // ステージ中央
+            this.scene.add(this.soundSource);
+            this.soundSource.add(this.positionalAudio);
+
+            console.log('🔗 アナライザーに接続中...');
+            // アナライザーに接続（周波数解析用）
+            this.positionalAudio.getOutput().connect(this.analyser);
+
+            // スピーカーオブジェクトを配置
+            this.createSpeakerObjects();
+
+            console.log('✅ 音楽ファイルを読み込みました（3D空間音響）:', url);
+            console.log('📊 Audio duration:', buffer.duration, 'seconds');
+            console.log('📍 音源位置: (0, 5, -65) ステージ中央');
+            console.log('🎧 AudioListener context state:', this.audioListener.context.state);
         } catch (error) {
-            console.error('音楽ファイルの読み込みに失敗:', error);
+            console.error('❌ 音楽ファイルの読み込みに失敗:', error);
+            console.error('URL:', url);
+            console.error('Error details:', error.message);
+            console.error('Error stack:', error.stack);
         }
     }
 
@@ -75,69 +146,57 @@ export class AudioSync {
     }
 
     async play() {
-        if (this.audioContext.state === 'suspended') {
-            await this.audioContext.resume();
-        }
+        try {
+            console.log('🎵 再生開始...');
+            console.log('AudioContext state:', this.audioContext.state);
+            console.log('PositionalAudio exists:', !!this.positionalAudio);
+            console.log('Buffer exists:', !!this.positionalAudio?.buffer);
 
-        if (this.audioElement) {
-            this.audioElement.play();
-        } else {
-            // デモサウンドの再生
-            this.oscillator.start(0);
-            this.playDemoSequence();
-        }
+            // AudioContextが停止している場合は再開
+            if (this.audioContext.state === 'suspended') {
+                console.log('⏸️ AudioContextが停止中です。再開します...');
+                await this.audioContext.resume();
+                console.log('▶️ AudioContext state after resume:', this.audioContext.state);
+            }
 
-        this.isPlaying = true;
-        console.log('音楽を再生開始');
+            // オーディオバッファが読み込まれているか確認
+            if (!this.positionalAudio) {
+                console.error('❌ PositionalAudioが初期化されていません');
+                return;
+            }
+
+            if (!this.positionalAudio.buffer) {
+                console.error('❌ オーディオバッファが読み込まれていません');
+                console.error('loadAudioFile()を先に呼び出してください');
+                return;
+            }
+
+            console.log('🎧 3D空間音響で音楽を再生します');
+            console.log('📍 音源位置: ステージ中央 (0, 5, -65)');
+            console.log('⏱️ Audio duration:', this.positionalAudio.buffer.duration, 'seconds');
+            console.log('🔊 Volume:', this.positionalAudio.getVolume());
+            console.log('📏 RefDistance:', this.positionalAudio.getRefDistance());
+
+            // 再生開始
+            this.positionalAudio.play();
+            this.isPlaying = true;
+
+            console.log('✅ 音楽の再生を開始しました（3D空間音響）');
+            console.log('🎼 isPlaying:', this.positionalAudio.isPlaying);
+        } catch (error) {
+            console.error('❌ 再生エラー:', error);
+            console.error('Error details:', error.message);
+            console.error('Error stack:', error.stack);
+        }
     }
 
     pause() {
-        if (this.audioElement) {
-            this.audioElement.pause();
-        } else {
-            this.gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+        if (this.positionalAudio && this.positionalAudio.isPlaying) {
+            this.positionalAudio.pause();
         }
 
         this.isPlaying = false;
         console.log('音楽を一時停止');
-    }
-
-    playDemoSequence() {
-        // デモ用のシンプルなメロディパターン
-        if (!this.isPlaying) return;
-
-        const now = this.audioContext.currentTime;
-        const notes = [
-            { freq: 261.63, time: 0.0, duration: 0.5 },   // C4
-            { freq: 293.66, time: 0.5, duration: 0.5 },   // D4
-            { freq: 329.63, time: 1.0, duration: 0.5 },   // E4
-            { freq: 349.23, time: 1.5, duration: 0.5 },   // F4
-            { freq: 392.00, time: 2.0, duration: 1.0 },   // G4
-            { freq: 349.23, time: 3.0, duration: 0.5 },   // F4
-            { freq: 329.63, time: 3.5, duration: 0.5 },   // E4
-            { freq: 293.66, time: 4.0, duration: 1.0 },   // D4
-        ];
-
-        const beatTimes = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0];
-
-        notes.forEach((note) => {
-            this.oscillator.frequency.setValueAtTime(
-                note.freq,
-                now + note.time
-            );
-            this.gainNode.gain.setValueAtTime(0.3, now + note.time);
-            this.gainNode.gain.exponentialRampToValueAtTime(
-                0.01,
-                now + note.time + note.duration
-            );
-        });
-
-        // 次のシーケンスをスケジュール
-        setTimeout(() => {
-            if (this.isPlaying) {
-                this.playDemoSequence();
-            }
-        }, 5000);
     }
 
     getAudioData() {
@@ -237,13 +296,8 @@ export class AudioSync {
     setVolume(volume) {
         volume = Math.max(0, Math.min(1, volume));
 
-        if (this.audioElement) {
-            this.audioElement.volume = volume;
-        } else if (this.gainNode) {
-            this.gainNode.gain.setValueAtTime(
-                volume * 0.3,
-                this.audioContext.currentTime
-            );
+        if (this.positionalAudio) {
+            this.positionalAudio.setVolume(volume);
         }
 
         console.log('音量を設定:', volume);
