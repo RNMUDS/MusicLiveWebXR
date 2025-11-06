@@ -358,7 +358,7 @@ const PORT = 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('═══════════════════════════════════════════════════');
-  console.log('🎵 Coldplay Concert WebGPU Server');
+  console.log('🎵 Live Concert WebGPU Server');
   console.log('═══════════════════════════════════════════════════');
   console.log('');
   console.log(`✅ HTTPS Server running at:`);

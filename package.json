@@ -1,7 +1,7 @@
 {
-  "name": "coldplay-concert-webgpu",
+  "name": "live-concert-webgpu",
   "version": "1.0.0",
-  "description": "Coldplay live concert experience with Three.js and WebGPU",
+  "description": "Live concert experience with Three.js and WebGPU",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,6 @@
     "three.js",
     "webgpu",
     "concert",
-    "coldplay",
     "3d"
   ],
   "author": "",

@@ -9,7 +9,7 @@ import { PenlightSystem } from './penlights.js';
 import { ScreenSystem } from './screens.js';
 import { AudioSync } from './audio.js';
 
-class ColdplayConcert {
+class LiveConcert {
     constructor() {
         this.container = document.getElementById('canvas-container');
         this.scene = null;
@@ -171,7 +171,7 @@ class ColdplayConcert {
         this.audioSync = new AudioSync(this.camera, this.scene);
         await this.audioSync.init();
 
-        // Coldplayの曲を読み込み
+        // 音楽ファイルを読み込み
         await this.audioSync.loadAudioFile('/a_sky_full_of_stars.mp3');
 
         console.log('すべてのシステムの初期化が完了しました');
@@ -314,4 +314,4 @@ class ColdplayConcert {
 }
 
 // アプリケーション起動
-new ColdplayConcert();
+new LiveConcert();

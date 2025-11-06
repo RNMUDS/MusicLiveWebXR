@@ -1,4 +1,4 @@
-# Coldplay Live Concert WebGPU Experience
+# Live Concert WebGPU Experience
 
 Three.jsとWebGPUを使用した、没入型の3Dコンサート体験アプリケーションです。仮想スタジアムに50,000人の観客、ダイナミックなライティングシステム、同期されたペンライト、インタラクティブなビジュアルエフェクトを実装しています。
 
